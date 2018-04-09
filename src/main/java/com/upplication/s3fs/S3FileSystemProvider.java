@@ -343,7 +343,11 @@ public class S3FileSystemProvider extends FileSystemProvider {
     @Override
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
         S3Path s3Path = toS3Path(path);
-        return new S3SeekableByteChannel(s3Path, options);
+        if (options.isEmpty() || options.contains(StandardOpenOption.READ)) {
+            return new S3ReadOnlySeekableByteChannel(s3Path, options);
+        } else {
+            return new S3SeekableByteChannel(s3Path, options);
+        }
     }
 
     @Override
