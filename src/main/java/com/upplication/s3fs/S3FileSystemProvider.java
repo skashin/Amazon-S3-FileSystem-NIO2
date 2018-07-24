@@ -344,6 +344,10 @@ public class S3FileSystemProvider extends FileSystemProvider {
     public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
         S3Path s3Path = toS3Path(path);
         if (options.isEmpty() || options.contains(StandardOpenOption.READ)) {
+            if (options.contains(StandardOpenOption.WRITE))
+                throw new UnsupportedOperationException(
+                    "Can't read and write one on channel"
+                );
             return new S3ReadOnlySeekableByteChannel(s3Path, options);
         } else {
             return new S3SeekableByteChannel(s3Path, options);

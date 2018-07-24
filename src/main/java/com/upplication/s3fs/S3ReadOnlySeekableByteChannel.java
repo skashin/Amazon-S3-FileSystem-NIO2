@@ -47,12 +47,27 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
 
         if (!exists) {
             throw new NoSuchFileException(format("target not exists: %s", path));
-        } else if (!options.isEmpty() && !this.options.contains(StandardOpenOption.READ)) { // TODO: handle writes
+        } else if (
+            this.options.contains(StandardOpenOption.WRITE) ||
+            this.options.contains(StandardOpenOption.CREATE) ||
+            this.options.contains(StandardOpenOption.CREATE_NEW) ||
+            this.options.contains(StandardOpenOption.APPEND)
+        ) {
             throw new ReadOnlyFileSystemException();
         }
 
-        this.length = path.getFileSystem().getClient()
-            .getObjectMetadata(path.getFileStore().getBucket().getName(), key).getContentLength();
+        this.length =
+            path
+                .getFileSystem()
+                .getClient()
+                .getObjectMetadata(
+                    path
+                        .getFileStore()
+                        .getBucket()
+                        .getName(),
+                    key
+                )
+                .getContentLength();
 
         openStreamAt(0);
     }
@@ -61,11 +76,26 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
         if (rbc != null) {
             rbc.close();
         }
-        GetObjectRequest rangeObjectRequest = new GetObjectRequest(path.getFileStore().getBucket().getName(), path.getKey()).withRange(position);
-        S3Object s3Object = path.getFileSystem()
-            .getClient()
-            .getObject(rangeObjectRequest);
-        bufferedStream = new ExtBufferedInputStream(s3Object.getObjectContent(), DEFAULT_BUFFER_SIZE);
+
+        GetObjectRequest rangeObjectRequest =
+            new GetObjectRequest(
+                path.getFileStore().name(),
+                path.getKey()
+            )
+            .withRange(position);
+
+        S3Object s3Object =
+            path
+                .getFileSystem()
+                .getClient()
+                .getObject(rangeObjectRequest);
+
+        bufferedStream =
+            new ExtBufferedInputStream(
+                s3Object.getObjectContent(),
+                DEFAULT_BUFFER_SIZE
+            );
+
         rbc = Channels.newChannel(bufferedStream);
         this.position = position;
     }
@@ -74,9 +104,7 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
         return rbc.isOpen();
     }
 
-    public long position() throws IOException {
-        return position;
-    }
+    public long position() { return position; }
 
     public SeekableByteChannel position(long targetPosition)
         throws IOException
@@ -103,17 +131,15 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
         return n;
     }
 
-    public SeekableByteChannel truncate(long size)
-        throws IOException
-    {
+    public SeekableByteChannel truncate(long size) {
         throw new NonWritableChannelException();
     }
 
-    public int write (ByteBuffer src) throws IOException {
+    public int write (ByteBuffer src) {
         throw new NonWritableChannelException();
     }
 
-    public long size() throws IOException {
+    public long size() {
         return length;
     }
 
@@ -122,8 +148,8 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
     }
 
     private class ExtBufferedInputStream extends BufferedInputStream {
-        private ExtBufferedInputStream(final InputStream inputStream, final int i) {
-            super(inputStream, i);
+        private ExtBufferedInputStream(final InputStream inputStream, final int size) {
+            super(inputStream, size);
         }
 
         /** Returns the number of bytes that can be read from the buffer without reading more into the buffer. */

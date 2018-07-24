@@ -78,7 +78,7 @@ public class NewByteChannelTest extends S3UnitTestBase {
         client.bucket("bucketA").dir("dir").file("dir/file", content.getBytes());
 
         Path base = createNewS3FileSystem().getPath("/bucketA/dir");
-        try (SeekableByteChannel seekable = s3fsProvider.newByteChannel(base.resolve("file"), EnumSet.of(StandardOpenOption.WRITE, StandardOpenOption.READ))) {
+        try (SeekableByteChannel seekable = s3fsProvider.newByteChannel(base.resolve("file"), EnumSet.of(StandardOpenOption.READ))) {
             long size = seekable.size();
             assertEquals(content.length(), size);
         }

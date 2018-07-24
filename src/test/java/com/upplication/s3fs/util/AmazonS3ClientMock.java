@@ -320,7 +320,11 @@ public class AmazonS3ClientMock extends AbstractAmazonS3 {
     }
 
     @Override
-    public S3Object getObject(String bucketName, String key) throws AmazonClientException {
+    public S3Object getObject(GetObjectRequest getObjectRequest) throws AmazonClientException {
+        String bucketName = getObjectRequest.getBucketName();
+        String key = getObjectRequest.getKey();
+        long[] range = getObjectRequest.getRange();
+
         Path result = find(bucketName, key);
         if (result == null || !Files.exists(result)) {
             result = find(bucketName, key + "/");
@@ -331,10 +335,15 @@ public class AmazonS3ClientMock extends AbstractAmazonS3 {
             throw amazonS3Exception;
         }
         try {
-            return parse(result, find(bucketName)).getS3Object();
+            return parse(result, find(bucketName), range).getS3Object();
         } catch (IOException e) {
             throw new AmazonServiceException("Problem getting Mock Object: ", e);
         }
+    }
+
+    @Override
+    public S3Object getObject(String bucketName, String key) throws AmazonClientException {
+        return getObject(new GetObjectRequest(bucketName, key));
     }
 
     @Override
@@ -351,7 +360,6 @@ public class AmazonS3ClientMock extends AbstractAmazonS3 {
         } catch (IOException e) {
             throw new AmazonServiceException("", e);
         }
-
     }
 
     @Override
@@ -362,8 +370,8 @@ public class AmazonS3ClientMock extends AbstractAmazonS3 {
 
         PutObjectResult putObjectResult = new PutObjectResult();
         putObjectResult.setETag("3a5c8b1ad448bca04584ecb55b836264");
+        putObjectResult.setMetadata(metadata);
         return putObjectResult;
-
     }
 
     @Override
@@ -459,6 +467,9 @@ public class AmazonS3ClientMock extends AbstractAmazonS3 {
     }
 
     private S3Element parse(Path elem, Path bucket) throws IOException {
+        return parse(elem, bucket, null);
+    }
+    private S3Element parse(Path elem, Path bucket, long[] range) throws IOException {
         S3Object object = new S3Object();
 
         String bucketName = bucket.getFileName().toString();
@@ -475,8 +486,20 @@ public class AmazonS3ClientMock extends AbstractAmazonS3 {
             metadata.setContentLength(0);
             object.setObjectContent(null);
         } else {
-            metadata.setContentLength(attr.size());
-            object.setObjectContent(new ByteArrayInputStream(Files.readAllBytes(elem)));
+            if (range == null) {
+                metadata.setContentLength(attr.size());
+                object.setObjectContent(new ByteArrayInputStream(Files.readAllBytes(elem)));
+            } else {
+                int start = (int) range[0];
+                int end = (int) range[1] + 1;
+                metadata.setContentLength(end - start);
+                byte[] bytes = Files.readAllBytes(elem);
+                object.setObjectContent(
+                    new ByteArrayInputStream(
+                        Arrays.copyOfRange(bytes, start, end)
+                    )
+                );
+            }
         }
 
         object.setObjectMetadata(metadata);
@@ -942,11 +965,6 @@ public class AmazonS3ClientMock extends AbstractAmazonS3 {
 
     @Override
     public ObjectMetadata getObjectMetadata(GetObjectMetadataRequest getObjectMetadataRequest) throws AmazonClientException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public S3Object getObject(GetObjectRequest getObjectRequest) throws AmazonClientException {
         throw new UnsupportedOperationException();
     }
 
