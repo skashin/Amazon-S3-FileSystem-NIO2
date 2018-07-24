@@ -63,8 +63,7 @@ public class S3ReadOnlySeekableByteChannel implements SeekableByteChannel {
                 .getObjectMetadata(
                     path
                         .getFileStore()
-                        .getBucket()
-                        .getName(),
+                        .name(),
                     key
                 )
                 .getContentLength();
