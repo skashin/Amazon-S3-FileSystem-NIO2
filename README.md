@@ -1,5 +1,7 @@
 *Forked from [Upplication/Amazon-S3-FileSystem-NIO2](https://github.com/Upplication/Amazon-S3-FileSystem-NIO2) with some fixes, and published to Maven Central as `org.lasersonlab:s3fs:2.2.3`; [see here for details](https://github.com/Upplication/Amazon-S3-FileSystem-NIO2/issues/103#issuecomment-407518516)*
 
+-------
+
 An **Amazon AWS S3** FileSystem Provider **JSR-203** for Java 7 (NIO2)
 
 Amazon Simple Storage Service provides a fully redundant data storage infrastructure for storing and retrieving any amount of data, at any time.
