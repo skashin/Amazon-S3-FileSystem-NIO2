@@ -6,6 +6,7 @@ import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.metrics.RequestMetricCollector;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.S3ClientOptions;
@@ -39,6 +40,7 @@ public abstract class AmazonS3Factory {
     public static final String SIGNER_OVERRIDE = "s3fs_signer_override";
     public static final String PATH_STYLE_ACCESS = "s3fs_path_style_access";
 
+
     /**
      * Build a new Amazon S3 instance with the URI and the properties provided
      * @param uri URI mandatory
@@ -46,7 +48,18 @@ public abstract class AmazonS3Factory {
      * @return AmazonS3
      */
     public AmazonS3 getAmazonS3(URI uri, Properties props) {
-        AmazonS3 client = createAmazonS3(getCredentialsProvider(props), getClientConfiguration(props), getRequestMetricsCollector(props));
+        return getAmazonS3(uri, props, null);
+    }
+
+    /**
+     * Build a new Amazon S3 instance using the provided URI, properties and optional credentials profile name
+     * @param uri URI mandatory
+     * @param props Properties with the credentials and others options
+     * @param credentialsProfile Optional profile name from the credentials file
+     * @return AmazonS3
+     */
+    public AmazonS3 getAmazonS3(URI uri, Properties props, String credentialsProfile) {
+        AmazonS3 client = createAmazonS3(getCredentialsProvider(props, credentialsProfile), getClientConfiguration(props), getRequestMetricsCollector(props));
         if (uri.getHost() != null) {
             if (uri.getPort() != -1)
                 client.setEndpoint(uri.getHost() + ':' + uri.getPort());
@@ -69,11 +82,13 @@ public abstract class AmazonS3Factory {
      */
     protected abstract AmazonS3 createAmazonS3(AWSCredentialsProvider credentialsProvider, ClientConfiguration clientConfiguration, RequestMetricCollector requestMetricsCollector);
 
-    protected AWSCredentialsProvider getCredentialsProvider(Properties props) {
+    protected AWSCredentialsProvider getCredentialsProvider(Properties props, String credentialsProfile) {
         AWSCredentialsProvider credentialsProvider;
-        if (props.getProperty(ACCESS_KEY) == null && props.getProperty(SECRET_KEY) == null)
+        if (credentialsProfile != null) {
+            credentialsProvider = new ProfileCredentialsProvider(credentialsProfile);
+        } else if (props.getProperty(ACCESS_KEY) == null && props.getProperty(SECRET_KEY) == null) {
             credentialsProvider = new DefaultAWSCredentialsProviderChain();
-        else
+        } else
             credentialsProvider = new AWSStaticCredentialsProvider(getAWSCredentials(props));
         return credentialsProvider;
     }
