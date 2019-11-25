@@ -1,6 +1,7 @@
 package com.upplication.s3fs;
 
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.internal.Constants;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.Bucket;
@@ -19,6 +20,8 @@ import com.upplication.s3fs.util.Cache;
 import com.upplication.s3fs.util.S3Utils;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -76,6 +79,8 @@ public class S3FileSystemProvider extends FileSystemProvider {
     private S3Utils s3Utils = new S3Utils();
     private Cache cache = new Cache();
 
+    private Properties bucketProfileMapping = null;
+
     @Override
     public String getScheme() {
         return "s3";
@@ -88,7 +93,7 @@ public class S3FileSystemProvider extends FileSystemProvider {
         Properties props = getProperties(uri, env);
         validateProperties(props);
         // try to get the filesystem by the key
-        String key = getFileSystemKey(uri, props);
+        String key = getFileSystemKey(uri);
         if (fileSystems.containsKey(key)) {
             throw new FileSystemAlreadyExistsException("File system " + uri.getScheme() + ':' + key + " already exists");
         }
@@ -120,8 +125,43 @@ public class S3FileSystemProvider extends FileSystemProvider {
         return props;
     }
 
-    private String getFileSystemKey(URI uri) {
-        return getFileSystemKey(uri, getProperties(uri, null));
+    protected String getCredentialsProfile(URI uri) {
+        if (getBucketProfileMapping().size() == 0) {
+            return null;
+        }
+        String bucket = getBucket(uri);
+        return (String) getBucketProfileMapping().get(bucket);
+    }
+
+    protected String getBucket(URI uri) {
+        String uriString = uri.toString();
+        int authoritySeparator = uriString.indexOf("@");
+        if (authoritySeparator > 0) {
+            uriString = uriString.substring(authoritySeparator + 1);
+        }
+
+        uriString = uriString.replace("s3:///", "s3://" + Constants.S3_HOSTNAME + "/");
+        uriString = uriString.replace("s3://", "http://");
+        AmazonS3URI s3URI = new AmazonS3URI(uriString);
+        String bucket = s3URI.getBucket();
+        if (bucket == null) {
+            bucket = "";
+        }
+
+        return bucket;
+    }
+
+    /**
+     * get the file system key represented by the bucket
+     * @param uri   URI with the endpoint
+     * @return String
+     */
+    protected String getFileSystemKey(URI uri) {
+        return getBucket(uri);
+    }
+
+    private String getFileSystemEndpointKey(URI uri) {
+        return getFileSystemEndpointKey(uri, getProperties(uri, null));
     }
 
     /**
@@ -133,7 +173,7 @@ public class S3FileSystemProvider extends FileSystemProvider {
      * @param props with the access key property
      * @return String
      */
-    protected String getFileSystemKey(URI uri, Properties props) {
+    protected String getFileSystemEndpointKey(URI uri, Properties props) {
         // we don`t use uri.getUserInfo and uri.getHost because secret key and access key have special chars
         // and dont return the correct strings
         String uriString = uri.toString().replace("s3://", "");
@@ -262,9 +302,10 @@ public class S3FileSystemProvider extends FileSystemProvider {
     public FileSystem getFileSystem(URI uri, Map<String, ?> env) {
         validateUri(uri);
         Properties props = getProperties(uri, env);
-        String key = this.getFileSystemKey(uri, props); // s3fs_access_key is part of the key here.
-        if (fileSystems.containsKey(key))
+        String key = this.getFileSystemKey(uri);
+        if (fileSystems.containsKey(key)) {
             return fileSystems.get(key);
+        }
         return newFileSystem(uri, env);
     }
 
@@ -274,9 +315,8 @@ public class S3FileSystemProvider extends FileSystemProvider {
         String key = this.getFileSystemKey(uri);
         if (fileSystems.containsKey(key)) {
             return fileSystems.get(key);
-        } else {
-            throw new FileSystemNotFoundException("S3 filesystem not yet created. Use newFileSystem() instead");
         }
+        return (S3FileSystem) newFileSystem(uri, null);
     }
 
     private S3Path toS3Path(Path path) {
@@ -558,11 +598,11 @@ public class S3FileSystemProvider extends FileSystemProvider {
      * @return S3FileSystem never null
      */
     public S3FileSystem createFileSystem(URI uri, Properties props) {
-        return new S3FileSystem(this, getFileSystemKey(uri, props), getAmazonS3(uri, props), uri.getHost());
+        return new S3FileSystem(this, getFileSystemKey(uri), getAmazonS3(uri, props), uri.getHost());
     }
 
     protected AmazonS3 getAmazonS3(URI uri, Properties props) {
-        return getAmazonS3Factory(props).getAmazonS3(uri, props);
+        return getAmazonS3Factory(props).getAmazonS3(uri, props, getCredentialsProfile(uri));
     }
 
     protected AmazonS3Factory getAmazonS3Factory(Properties props) {
@@ -593,6 +633,35 @@ public class S3FileSystemProvider extends FileSystemProvider {
             // If amazon.properties can't be loaded that's ok.
         }
         return props;
+    }
+
+    private Properties loadBucketProfileMapping() {
+        String userHome = System.getProperty("user.home");
+        if (userHome == null) {
+            userHome = "~/";
+        }
+        File mappingFile = new File(userHome + File.separator + ".aws" + File.separator + "bucket_profile.properties");
+
+        Properties props = new Properties();
+        if (!mappingFile.exists()) {
+            return props;
+        }
+
+        try (InputStream input = new FileInputStream(mappingFile)) {
+            props.load(input);
+        } catch (IOException ex) {
+            throw new RuntimeException("Error loading bucket mappings from " + mappingFile.getPath(), ex);
+        }
+
+        return props;
+    }
+
+    private Properties getBucketProfileMapping() {
+        if (bucketProfileMapping == null) {
+            bucketProfileMapping = loadBucketProfileMapping();
+        }
+
+        return bucketProfileMapping;
     }
 
     // ~~~
