@@ -635,10 +635,7 @@ public class S3FileSystemProvider extends FileSystemProvider {
         return props;
     }
 
-    private Properties getBucketProfileMapping() {
-        if (bucketProfileMapping != null) {
-            return bucketProfileMapping;
-        }
+    private Properties loadBucketProfileMapping() {
         String userHome = System.getProperty("user.home");
         if (userHome == null) {
             userHome = "~/";
@@ -657,6 +654,14 @@ public class S3FileSystemProvider extends FileSystemProvider {
         }
 
         return props;
+    }
+
+    private Properties getBucketProfileMapping() {
+        if (bucketProfileMapping == null) {
+            bucketProfileMapping = loadBucketProfileMapping();
+        }
+
+        return bucketProfileMapping;
     }
 
     // ~~~
